@@ -2,8 +2,11 @@ Extensions [gis
 pathdir]
 
 globals[ ;variáveis que podem ser usadas por todos os agentes, e podem variar
+  x
+  file0
+  file1
+  file
   resolution ;how much each pixel represents - landscape resolution
-  final_list ;list to store de data
   oriented ;variável para orientação
 
   ;import landscape cover
@@ -187,7 +190,7 @@ to import_DIST_TREES ;import DIST from trees
   set new_landscape_DIST_TREES word directory_DIST_TREES landscape_DIST_TREES
 end
 
-;submodels to define landscape data
+;submodels to define landscape datax
 
 to define_landscape ;define landscape
 ;------------------------------------------------------Set landscape
@@ -246,11 +249,20 @@ end
 to setup ;;---------------------------------------CREATE LANDSCAPE AND TURTLES------------------------------------------------
   clear-all
   reset-ticks
+  set-current-directory "/home/erika/Documentos/NETLOGO/Results"
+  set file0 word specie "_"
+  set file1 word file0 num_lands
+  if SS = true
+  [set file word file1 "_SS"]
+  if TREES_SS = true
+  [set file word file1 "_TREES_SS"]
+  if SS = false and TREES_SS = false
+  [set file word file1 "_PATCHES_ONLY"]
 
+  set x 0
   file-close
-  if file-exists? "data.txt"
-  [file-delete "data.txt"]
-
+  while [file-exists? word file "_data.txt"]
+  [set file word file x]
  ;---------------------------------------------------CREATE ENVIRONMENT----------------------------------------------------
   resize-world -512 512 -512 512 ;Definir a paisagem como 1024x1024.
   set resolution 10 ;ou seja cada pixel é equivalente à 10m
@@ -301,25 +313,20 @@ to setup ;;---------------------------------------CREATE LANDSCAPE AND TURTLES--
     import_PATCHES_ONLY ;import landscape with patches
     import_ID_PATCHES ;import ID of patches
     import_DIST_PATCHES ;import DIST from patches
-
     ;define all
     define_landscape
     define_ID_PATCHES
     define_DIST_PATCHES
   ]
 
-  ;create agentset of fragments
+  ;create patch-sets
   set fragment_set patch-set patches with [cover = 1]
   set ss_set patch-set patches with [cover = 2]
   set trees_set patch-set patches with [cover = 3]
-  ;create agentsets with all patches in matrix (cover = 0) and distance between PR and PR + 10
-  ;set border_patches patch-set patches with [cover = 0 and PATCHES_DIST > (perceptual_range / 10) and PATCHES_DIST < (perceptual_range / 10) + 5]
-  ;set border_ss patch-set patches with [cover = 0 and SS_DIST > (perceptual_range / 10) and SS_DIST < (perceptual_range / 10) + 5]
-  ;set border_trees patch-set patches with [cover = 0 and TREES_DIST > (perceptual_range / 10) and TREES_DIST < (perceptual_range / 10) + 5]
 
-  set border_patches patch-set patches with [cover = 0 and PATCHES_DIST > (perceptual_range) and PATCHES_DIST < (perceptual_range) + 5]
-  set border_ss patch-set patches with [cover = 0 and SS_DIST > (perceptual_range) and SS_DIST < (perceptual_range) + 5]
-  set border_trees patch-set patches with [cover = 0 and TREES_DIST > (perceptual_range) and TREES_DIST < (perceptual_range) + 5]
+  set border_patches patch-set patches with [cover = 0 and PATCHES_DIST > (perceptual_range) and PATCHES_DIST < (perceptual_range) + 10]
+  set border_ss patch-set patches with [cover = 0 and SS_DIST > (perceptual_range) and SS_DIST < (perceptual_range) + 10]
+  set border_trees patch-set patches with [cover = 0 and TREES_DIST > (perceptual_range) and TREES_DIST < (perceptual_range) + 10]
 
 
 ;------------------------------------------------------CREATE AGENTS---------------------------------------------------------
@@ -332,100 +339,89 @@ to setup ;;---------------------------------------CREATE LANDSCAPE AND TURTLES--
     set life 1 ; all turtles alive
     set distance_total 0 ;set start distance at 0
     set distance_mort 0 ;distance of mortality - each 100m --> chance of mortality
-
-    file-open "data.txt"
-    file-print (list landscape specie perceptual_range who time1 xcor ycor oriented l turning_angle ang cover life ID PATCHES_ID SS_ID TREES_ID distance_total distance_mort source end_frag SS TREES_SS)
-
+    set actual_cover 1
 
     set start-patch one-of border_patches ;get a random patch of border_patches
     setxy ([pxcor] of start-patch) ([pycor] of start-patch) ;set start-patch
     set initial_frag min-one-of fragment_set [distance myself]
     set source [PATCHES_ID] of initial_frag ;define fragment initial for each turtle
+    let initial_xcor [pxcor] of initial_frag
+    let initial_ycor [pycor] of initial_frag
     set ID source
     face initial_frag
     set heading heading + 180
 
-    file-print (list landscape specie perceptual_range who time1 xcor ycor oriented l turning_angle ang cover life ID distance_total distance_mort source end_frag SS TREES_SS)
+    ;register values when turtle is in the fragment
+    file-open word file "_data.txt"
+    file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life initial_xcor initial_ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
     file-close
 
+    ;register values when turtle is in the start-patch in the matrix
+    set actual_cover 0
+
+    file-open word file "_data.txt"
+    file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
+    file-close
   ]
 end
 
 ;;-------------------------------------MOVEMENT------------------------------------------
 ;observer procedure
 to go ;;iniciar a simulação
-  set-current-directory "/home/erika/Dropbox/Mestrado/UFRJ/Modelagem/IBM"
+
   tick
   ask turtles
-  [move]
+  [
+    if [cover] of patch-here = 0
+    [move]
+    if [cover] of patch-here = 1
+    [in_patch]
+    if [cover] of patch-here = 2
+    [in_ss]
+    if [cover] of patch-here = 3
+    [in_trees]
+    if life = 0
+    [die]
+  ]
+
   if ticks = 10000
   [
     ask turtles [
       set time1 time1 + 1
-      file-open "data.txt"
-      file-print (list landscape specie perceptual_range who time1 xcor ycor oriented l turning_angle ang cover life ID PATCHES_ID SS_ID TREES_ID distance_total distance_mort source end_frag SS TREES_SS)
+      if [cover] of patch-here = 0
+      [set life 0]
+
+      ;register last step
+      file-open word file "_data.txt"
+      file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
       file-close
-      if [cover] of patch-here != 1
-      [set life 0
-        die]
+
+      if [cover] of patch-here = 0
+      [die]
     ]
     stop
-    file-close
   ]
  end
 
 ;turtle procedure
 to move ;Se o indivíduo decidir sair, então vai dispersar pela matriz.
   pen-down ;função para criar linhas das trajetórias na paisagem durante a simulação
+  set actual_cover 0
+  ifelse not any? patches in-radius PR with [cover != 0]
+  [
+    ;movimento não orientado
+    set oriented 0
+    set RAN random-float 1
+    set l ((Xmax-no ^ (expo-no + 1) - Xmin-no ^ (expo-no + 1)) * RAN + Xmin-no ^ (expo-no + 1)) ^ (1 / (expo-no + 1))
+    set turning_angle random-normal mean-ang-no sd-ang-no
+    set ang (heading + turning_angle) ; angulo de virada.
+    set color yellow
 
-  if [cover] of patch-here = 0 [
-    set actual_cover 0
-    set ID 0
-    ifelse not any? patches in-radius PR with [cover != 0]
-    [
-      ;movimento não orientado
-      set oriented 0
-      set RAN random-float 1
-      set l ((Xmax-no ^ (expo-no + 1) - Xmin-no ^ (expo-no + 1)) * RAN + Xmin-no ^ (expo-no + 1)) ^ (1 / (expo-no + 1)) / resolution
-      set turning_angle random-normal mean-ang-no sd-ang-no
-      set ang (heading + turning_angle) ; angulo de virada.
-      set color yellow
-      ;-----Calcular as coordenadas----
+    ;-----Calcular as coordenadas----
+    set new-xcor (xcor + (l / resolution * sin(ang))) ;definir a nova coordenada x
+    set new-ycor (ycor + (l / resolution * cos(ang))) ;definir a nova coordenada y
 
-      set new-xcor (xcor + (l * sin(ang))) ;definir a nova coordenada x
-      set new-ycor (ycor + (l * cos(ang))) ;definir a nova coordenada y
-    ]
-    [ ;else do ifelse not any? patches in-radius PR with [cover != 0]
-      ;near_cover - patchset of all patches that are in the radius of PR and might be tree,ss or patch.
-      let near_cover patch-set patches in-radius PR with [cover != 0 and (PATCHES_ID != [ID] of myself or SS_ID != [ID] of myself or TREES_ID != [ID] of myself)]
-      let goal_pixel min-one-of near_cover [distance myself] ;get one of that near_cover and define as goal
-
-      if ([cover] of goal_pixel = 1) or ([cover] of goal_pixel = 2) ;if that goal is patch or ss
-      [
-        ;movimento orientado
-        set oriented 1
-        face goal_pixel  ;pcolor = green]; and patchID != source]
-        set RAN random-float 1
-        set l ((Xmax-o ^ (expo-o + 1) - Xmin-o ^ (expo-o + 1)) * RAN + Xmin-o ^ (expo-o + 1)) ^ (1 / (expo-o + 1)) / resolution
-        set turning_angle random-normal mean-ang-o sd-ang-o
-        set ang (heading + turning_angle) ; angulo de virada.
-        set color black
-        ;-----Calcular as coordenadas----goal_pixel with [cover = 1 or cover = 2]
-
-        set new-xcor (xcor + (l * sin(ang))) ;definir a nova coordenada x
-        set new-ycor (ycor + (l * cos(ang))) ;definir a nova coordenada y
-      ]
-      if ([cover] of goal_pixel = 3) ;if that goal is tree
-      [
-        set oriented 1
-        let new-patch goal_pixel
-        set new-xcor [pxcor] of new-patch
-        set new-ycor [pycor] of new-patch
-        set l distancexy new-xcor new-ycor
-      ]
-    ]
-
-    ;definir novas coordenadas
+    ;-----Definir novas coordenadas
     setxy new-xcor new-ycor ; define as novas coordenadas
     set distance_total distance_total + l
     set distance_mort distance_mort + l
@@ -437,79 +433,166 @@ to move ;Se o indivíduo decidir sair, então vai dispersar pela matriz.
       mortality
       set distance_mort (distance_mort - 100)
     ]
+  ]
+  [ ;else do ifelse not any? patches in-radius PR with [cover != 0]
+    ;near_cover - patchset of all patches that are in the radius of PR and might be tree,ss or patch.
+    let near_cover patch-set patches in-radius PR with [cover != 0 and (PATCHES_ID != [ID] of myself or SS_ID != [ID] of myself or TREES_ID != [ID] of myself)]
+    let goal_pixel min-one-of near_cover [distance myself] ;get one of that near_cover and define as goal
 
+    if ([cover] of goal_pixel = 1) or ([cover] of goal_pixel = 2) ;if that goal is patch or ss
+    [
+      ;movimento orientado
+      set oriented 1
+      face goal_pixel  ;pcolor = green]; and patchID != source]
+      set RAN random-float 1
+      set l ((Xmax-o ^ (expo-o + 1) - Xmin-o ^ (expo-o + 1)) * RAN + Xmin-o ^ (expo-o + 1)) ^ (1 / (expo-o + 1))
+      set turning_angle random-normal mean-ang-o sd-ang-o
+      set ang (heading + turning_angle) ; angulo de virada.
+      set color black
+
+      ;-----Calcular as coordenadas----goal_pixel with [cover = 1 or cover = 2]
+      set new-xcor (xcor + (l / resolution * sin(ang))) ;definir a nova coordenada x
+      set new-ycor (ycor + (l / resolution * cos(ang))) ;definir a nova coordenada y
+
+      ;-----Definir novas coordenadas
+      setxy new-xcor new-ycor ; define as novas coordenadas
+      set distance_total distance_total + l
+      set distance_mort distance_mort + l
+
+      ;-----Testar mortalidade proporcional ao step lenght (l)
+
+      if distance_mort > 100
+      [
+        mortality
+        set distance_mort (distance_mort - 100)
+      ]
+    ]
+
+    if ([cover] of goal_pixel = 3) ;if that goal is tree
+    [
+      set oriented 1
+      let new-patch goal_pixel
+
+      ;-----Calcula novas coordenadas
+      set new-xcor [pxcor] of new-patch
+      set new-ycor [pycor] of new-patch
+      set l distancexy new-xcor new-ycor
+
+      let actual_heading heading
+      face new-patch
+      let new_heading heading
+      set turning_angle (new_heading - actual_heading)
+      set ang new_heading
+
+      ;-----Definir novas coordenadas
+      setxy new-xcor new-ycor ; define as novas coordenadas
+      set distance_total distance_total + l
+      set distance_mort distance_mort + l
+
+      ;-----Testar mortalidade proporcional ao step lenght (l)
+
+      while [distance_mort > 100]
+      [
+        mortality
+        set distance_mort (distance_mort - 100)
+      ]
+    ]
   ]; bracket de fechamento do if
 
-  if [cover] of patch-here = 2
-  [set actual_cover 2
-    set color blue
-    set ID [SS_ID] of patch-here
-    ifelse not any? neighbors with [cover != 0]
-    [move-to one-of neighbors
-      set l 1
-      set distance_total distance_total + l
-    ]
-    [let near_patches patch-set patches with [cover = 0 and distance myself > 20 and distance myself < 22]
-      let near_patch one-of near_patches
-      set new-xcor [pxcor] of near_patch
-      set new-ycor [pycor] of near_patch
-      setxy new-xcor new-ycor
-      set l distancexy new-xcor new-ycor
-      set distance_total distance_total + l
-      set distance_mort distance_mort + l
-    ]
-  ]
+  set time1 time1 + 1
 
-  if [cover] of patch-here = 3
-  [set actual_cover 3
-    set color red
-    set ID [TREES_ID] of patch-here
-    ifelse not any? neighbors with [cover != 0]
-    [move-to one-of neighbors
-      set l 1
-      set distance_total distance_total + l
-    ]
-    [let near_patches patch-set patches with [cover = 0 and distance myself > 20 and distance myself < 22]
-      let near_patch one-of near_patches
-      set new-xcor [pxcor] of near_patch
-      set new-ycor [pycor] of near_patch
-      setxy new-xcor new-ycor
-      set l distancexy new-xcor new-ycor
-      set distance_total distance_total + l
-      set distance_mort distance_mort + l
-    ]
-  ]
+  file-open word file "_data.txt"
+  file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
+  file-close
 
+  if life = 0
+  [die]
+end
+
+to in_patch
 ;----------------------------------------------------------------------------
-
-  ifelse distance_total < 300
-  [
-    ifelse [cover] of patch-here = 1 and [PATCHES_ID] of patch-here = [PATCHES_ID] of initial_frag
-    [set actual_cover 1
-      set ID [PATCHES_ID] of patch-here
-      let near_patch min-one-of border_patches [distance myself]
-      setxy ([pxcor] of near_patch) ([pycor] of near_patch)
-    ]
-    [set actual_cover 1
-      set ID [PATCHES_ID] of patch-here
-      set end_frag [PATCHES_ID] of patch-here
-      stop]
+  ifelse [PATCHES_ID] of patch-here = [PATCHES_ID] of initial_frag and distance_total < 1000
+  [set actual_cover 1
+    set ID [PATCHES_ID] of patch-here
+    let near_patch min-one-of border_patches [distance myself]
+    setxy ([pxcor] of near_patch) ([pycor] of near_patch)
   ]
-  [
-    if [cover] of patch-here = 1
-    [set actual_cover 1
-      set ID [PATCHES_ID] of patch-here
-      set end_frag [PATCHES_ID] of patch-here
-      stop]
+  [set actual_cover 1
+    set ID [PATCHES_ID] of patch-here
+    set end_frag [PATCHES_ID] of patch-here
+    stop]
+
+  set time1 time1 + 1
+
+  file-open word file "_data.txt"
+  file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
+  file-close
+end
+
+to in_ss
+  set actual_cover 2
+  set color blue
+  set ID [SS_ID] of patch-here
+  set distance_mort 0
+  ifelse count neighbors with [cover = 2] >= 5
+  [move-to one-of neighbors with [cover = 2]
+    set l 10 ;Each pixel is equal to 10m, move one pixel, means 10m.
+    set distance_total distance_total + l
+  ]
+  [let prange PR
+    let near_patches patch-set patches with [cover = 0 and distance myself > prange and distance myself < prange + 2]
+    let near_patch one-of near_patches
+    set new-xcor [pxcor] of near_patch
+    set new-ycor [pycor] of near_patch
+    set l distancexy new-xcor new-ycor
+    set l l * 10
+
+    let actual_heading heading
+    face near_patch
+    let new_heading heading
+    set turning_angle (new_heading - actual_heading)
+    set ang new_heading
+
+    setxy new-xcor new-ycor
+    set distance_total distance_total + l
+    set distance_mort distance_mort + l
   ]
 
   set time1 time1 + 1
   ;Adicionar as coordenadas ao arquivo output
-  file-open "data.txt"
-  file-print (list landscape specie perceptual_range who time1 xcor ycor oriented l turning_angle ang actual_cover life ID patches_id ss_id trees_id distance_total distance_mort source end_frag SS TREES_SS)
+  file-open word file "_data.txt"
+  file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
   file-close
+end
 
-  if life = 0 [die]
+to in_trees
+  set actual_cover 3
+  set color red
+  set ID [TREES_ID] of patch-here
+  set distance_mort 0
+  ;turtle move to matrix, to a patch with distance between 10 - 12 to not come back to same tree.
+  let prange PR ;use PR that is a turtle-only variable, to a variable that might be used by patch
+  let near_patches patch-set patches with [cover = 0 and distance myself > prange and distance myself < prange + 2]
+  let near_patch one-of near_patches
+  set new-xcor [pxcor] of near_patch
+  set new-ycor [pycor] of near_patch
+  set l distancexy new-xcor new-ycor ;step length is the distance to near_patch
+  set l l * 10 ;distance is in pixels, then it should be multiplied by 10, that is what represents in meters
+  let actual_heading heading
+  face near_patch
+  let new_heading heading
+  set turning_angle (new_heading - actual_heading) ;set ang by trajectory done
+  set ang new_heading
+
+  setxy new-xcor new-ycor
+  set distance_total distance_total + l
+  set distance_mort distance_mort + l  ;the turtle is in the tree(10-20m), so when turtle is in the tree, the distance_mort reduce 10m.
+
+  set time1 time1 + 1
+  ;Adicionar as coordenadas ao arquivo output
+  file-open word file "_data.txt"
+  file-print (list landscape specie perceptual_range SS TREES_SS who time1 actual_cover ID life xcor ycor oriented l turning_angle ang source end_frag distance_total distance_mort)
+  file-close
 end
 
 to mortality ;Taxa de mortalidade constante enquanto o indivíduo anda pela matriz.
@@ -571,8 +654,8 @@ SLIDER
 individuals
 individuals
 0
-100
-1.0
+1000
+100.0
 1
 1
 NIL
@@ -604,7 +687,7 @@ perceptual_range
 perceptual_range
 0
 1000
-100.0
+200.0
 50
 1
 NIL
@@ -619,7 +702,7 @@ mortality_rate
 mortality_rate
 0
 1
-0.005
+0.01
 0.001
 1
 NIL
@@ -642,7 +725,7 @@ INPUTBOX
 90
 365
 Xmax-no
-19.4
+16.8
 1
 0
 Number
@@ -653,7 +736,7 @@ INPUTBOX
 90
 430
 Expo-no
--1.98307373966
+-1.54405444071
 1
 0
 Number
@@ -664,7 +747,7 @@ INPUTBOX
 175
 300
 mean-ang-no
--2.29
+-0.74
 1
 0
 Number
@@ -675,7 +758,7 @@ INPUTBOX
 175
 365
 sd-ang-no
-60.1
+55.81
 1
 0
 Number
@@ -686,7 +769,7 @@ INPUTBOX
 275
 295
 Xmin-o
-0.1
+0.25
 1
 0
 Number
@@ -697,7 +780,7 @@ INPUTBOX
 275
 360
 Xmax-o
-11.5
+26.0
 1
 0
 Number
@@ -708,7 +791,7 @@ INPUTBOX
 275
 425
 Expo-o
--1.45759352553
+-1.16574079902
 1
 0
 Number
@@ -719,7 +802,7 @@ INPUTBOX
 360
 295
 mean-ang-o
--1.09
+0.34
 1
 0
 Number
@@ -730,7 +813,7 @@ INPUTBOX
 360
 360
 sd-ang-o
-56.11
+50.45
 1
 0
 Number
@@ -761,7 +844,7 @@ INPUTBOX
 80
 70
 num_lands
-28.0
+2.0
 1
 0
 Number
@@ -772,7 +855,7 @@ INPUTBOX
 310
 70
 specie
-marmosa_paraguayana
+DA
 1
 0
 String
@@ -795,7 +878,7 @@ SWITCH
 483
 TREES_SS
 TREES_SS
-0
+1
 1
 -1000
 
@@ -1141,26 +1224,26 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.1
+NetLogo 6.0.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
 <experiments>
-  <experiment name="didelphis_TREES_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="didelphis_TREES_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;didelphis_aurita&quot;"/>
+      <value value="&quot;DA&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="200"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
       <value value="-0.74"/>
@@ -1200,21 +1283,21 @@ NetLogo 6.0.1
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="philander_TREES_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="philander_TREES_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;philander_frenatus&quot;"/>
+      <value value="&quot;PF&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
       <value value="0.33"/>
@@ -1254,21 +1337,21 @@ NetLogo 6.0.1
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="marmosa_TREES_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="marmosa_TREES_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;marmosa_paraguayana&quot;"/>
+      <value value="&quot;MP&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
       <value value="-2.29"/>
@@ -1308,21 +1391,21 @@ NetLogo 6.0.1
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="didelphis_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="didelphis_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;didelphis_aurita&quot;"/>
+      <value value="&quot;DA&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="200"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
       <value value="-0.74"/>
@@ -1362,48 +1445,48 @@ NetLogo 6.0.1
       <value value="true"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="philander_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="philander_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;philander_frenatus&quot;"/>
+      <value value="&quot;PF&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
-      <value value="-0.74"/>
+      <value value="0.33"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-no">
-      <value value="55.81"/>
+      <value value="54.59"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-o">
-      <value value="0.34"/>
+      <value value="3.11"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-o">
-      <value value="50.45"/>
+      <value value="58.19"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-no">
-      <value value="-1.54405444071"/>
+      <value value="-1.71113207331"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-no">
-      <value value="16.8"/>
+      <value value="20.3"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-no">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-o">
-      <value value="-1.16574079902"/>
+      <value value="-1.46996251381"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-o">
-      <value value="26"/>
+      <value value="48"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-o">
       <value value="0.25"/>
@@ -1416,51 +1499,51 @@ NetLogo 6.0.1
       <value value="true"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="marmosa_SS_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="marmosa_SS_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;marmosa_paraguayana&quot;"/>
+      <value value="&quot;MP&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
-      <value value="-0.74"/>
+      <value value="-2.29"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-no">
-      <value value="55.81"/>
+      <value value="60.1"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-o">
-      <value value="0.34"/>
+      <value value="-1.09"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-o">
-      <value value="50.45"/>
+      <value value="56.11"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-no">
-      <value value="-1.54405444071"/>
+      <value value="-1.98307373966"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-no">
-      <value value="16.8"/>
+      <value value="19.4"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-no">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-o">
-      <value value="-1.16574079902"/>
+      <value value="-1.45759352553"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-o">
-      <value value="26"/>
+      <value value="11.5"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-o">
-      <value value="0.25"/>
+      <value value="0.1"/>
     </enumeratedValueSet>
     <steppedValueSet variable="num_lands" first="0" step="1" last="28"/>
     <enumeratedValueSet variable="TREES_SS">
@@ -1470,21 +1553,21 @@ NetLogo 6.0.1
       <value value="true"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="didelphis_PATCHES_ONLY_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="didelphis_PATCHES_ONLY_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;didelphis_aurita&quot;"/>
+      <value value="&quot;DA&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="200"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
       <value value="-0.74"/>
@@ -1524,48 +1607,48 @@ NetLogo 6.0.1
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="philander_PATCHES_ONLY_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="philander_PATCHES_ONLY_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;philander_frenatus&quot;"/>
+      <value value="&quot;PF&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
-      <value value="-0.74"/>
+      <value value="0.33"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-no">
-      <value value="55.81"/>
+      <value value="54.59"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-o">
-      <value value="0.34"/>
+      <value value="3.11"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-o">
-      <value value="50.45"/>
+      <value value="58.19"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-no">
-      <value value="-1.54405444071"/>
+      <value value="-1.71113207331"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-no">
-      <value value="16.8"/>
+      <value value="20.3"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-no">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-o">
-      <value value="-1.16574079902"/>
+      <value value="-1.46996251381"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-o">
-      <value value="26"/>
+      <value value="48"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-o">
       <value value="0.25"/>
@@ -1578,51 +1661,51 @@ NetLogo 6.0.1
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="marmosa_PATCHES_ONLY_0.005" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="marmosa_PATCHES_ONLY_0.01" repetitions="5" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <metric>count turtles</metric>
     <enumeratedValueSet variable="specie">
-      <value value="&quot;marmosa_paraguayana&quot;"/>
+      <value value="&quot;MP&quot;"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="perceptual_range">
       <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mortality_rate">
-      <value value="0.005"/>
+      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="individuals">
-      <value value="30"/>
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-no">
-      <value value="-0.74"/>
+      <value value="-2.29"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-no">
-      <value value="55.81"/>
+      <value value="60.1"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="mean-ang-o">
-      <value value="0.34"/>
+      <value value="-1.09"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="sd-ang-o">
-      <value value="50.45"/>
+      <value value="56.11"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-no">
-      <value value="-1.54405444071"/>
+      <value value="-1.98307373966"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-no">
-      <value value="16.8"/>
+      <value value="19.4"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-no">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Expo-o">
-      <value value="-1.16574079902"/>
+      <value value="-1.45759352553"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmax-o">
-      <value value="26"/>
+      <value value="11.5"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="Xmin-o">
-      <value value="0.25"/>
+      <value value="0.1"/>
     </enumeratedValueSet>
     <steppedValueSet variable="num_lands" first="0" step="1" last="28"/>
     <enumeratedValueSet variable="TREES_SS">
